@@ -16,6 +16,7 @@ final class AppState {
     var showTrend = false
     var showLogin = false
     var consecutiveFailures = 0
+    var sessionExpired = false
 
     let keychain = KeychainService()
     var store: QuotaStore?
@@ -35,6 +36,7 @@ final class AppState {
     }
 
     var statusText: String {
+        if sessionExpired { return "⚠️" }
         if let util = fiveHourUtil {
             return "\(Int(util))%"
         }
@@ -42,6 +44,7 @@ final class AppState {
     }
 
     var statusColor: Color {
+        if sessionExpired { return .red }
         guard let util = fiveHourUtil else { return .gray }
         return UsageColor.for(utilization: util)
     }
@@ -103,6 +106,12 @@ final class AppState {
 
             fetcher.reset()
             setupFetcher()
+
+            // Treat repeated failures as session expiry
+            if consecutiveFailures >= 2 {
+                sessionExpired = true
+                showLogin = true
+            }
         }
 
         isLoading = false
@@ -114,6 +123,8 @@ final class AppState {
     }
 
     func onCredentialsSaved() {
+        sessionExpired = false
+        consecutiveFailures = 0
         setupFetcher()
         Task { await refresh() }
     }
