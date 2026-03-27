@@ -74,7 +74,7 @@ final class AppState {
 
     func refresh() async {
         guard let fetcher else {
-            showSettings = true
+            showLogin = true
             return
         }
         isLoading = true
@@ -191,6 +191,8 @@ struct ClaudeQuotaMenubarApp: App {
             LoginWebView(keychain: state.keychain, onLoginSuccess: {
                 state.onCredentialsSaved()
                 state.showLogin = false
+                // Close the login window
+                NSApp.windows.first { $0.title == "Login to Claude" }?.close()
             })
             .frame(minWidth: 800, minHeight: 700)
         }
