@@ -46,17 +46,9 @@ struct LoginWebView: NSViewRepresentable {
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         context.coordinator.webView = webView
 
-        let cookieStore = config.websiteDataStore.httpCookieStore
-        cookieStore.add(context.coordinator)
+        config.websiteDataStore.httpCookieStore.add(context.coordinator)
 
-        // Clear old claude.ai cookies before loading login page
-        Task { @MainActor in
-            let cookies = await cookieStore.allCookies()
-            for cookie in cookies where cookie.domain.contains("claude.ai") {
-                await cookieStore.deleteCookie(cookie)
-            }
-            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
-        }
+        webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
 
         return webView
     }
