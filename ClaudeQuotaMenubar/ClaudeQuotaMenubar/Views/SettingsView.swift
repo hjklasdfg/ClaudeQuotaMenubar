@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -8,6 +9,7 @@ struct SettingsView: View {
     @State private var sessionKey: String = ""
     @State private var organizationId: String = ""
     @State private var showingSessionKey = false
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -54,6 +56,22 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(8)
+            }
+
+            GroupBox("General") {
+                Toggle("Launch at login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        do {
+                            if newValue {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                try SMAppService.mainApp.unregister()
+                            }
+                        } catch {
+                            launchAtLogin = !newValue // revert on failure
+                        }
+                    }
+                    .padding(8)
             }
 
             HStack {
