@@ -14,6 +14,7 @@ final class AppState {
     var errorMessage: String?
     var showSettings = false
     var showTrend = false
+    var showLogin = false
     var consecutiveFailures = 0
 
     let keychain = KeychainService()
@@ -47,7 +48,7 @@ final class AppState {
 
     func startPolling() {
         guard keychain.hasCredentials else {
-            showSettings = true
+            showLogin = true
             return
         }
         setupFetcher()
@@ -174,5 +175,14 @@ struct ClaudeQuotaMenubarApp: App {
             TrendWindow(store: state.store)
         }
         .defaultSize(width: 600, height: 400)
+
+        Window("Login to Claude", id: "login") {
+            LoginWebView(keychain: state.keychain, onLoginSuccess: {
+                state.onCredentialsSaved()
+                state.showLogin = false
+            })
+            .frame(minWidth: 800, minHeight: 700)
+        }
+        .windowResizability(.contentMinSize)
     }
 }
