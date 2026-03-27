@@ -137,7 +137,7 @@ final class AppState {
         } else {
             let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: date)).day ?? 0
             if days > 0 {
-                return "\(days) 天后"
+                return "in \(days)d"
             } else {
                 let formatter = DateFormatter()
                 formatter.dateFormat = "M/d"

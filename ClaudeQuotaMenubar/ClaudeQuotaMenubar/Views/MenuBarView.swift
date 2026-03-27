@@ -6,11 +6,11 @@ struct MenuBarView: View {
 
     var body: some View {
         if let fiveHour = state.fiveHourUtil {
-            Button("5 小时用量：\(Int(fiveHour))%\(state.trendText())（重置：\(state.formatResetTime(state.fiveHourResetsAt))）") {}
+            Button("5h Usage: \(Int(fiveHour))%\(state.trendText()) (resets: \(state.formatResetTime(state.fiveHourResetsAt)))") {}
         }
 
         if let sevenDay = state.sevenDayUtil {
-            Button("7 天用量：\(Int(sevenDay))%（重置：\(state.formatResetTime(state.sevenDayResetsAt))）") {}
+            Button("7d Usage: \(Int(sevenDay))% (resets: \(state.formatResetTime(state.sevenDayResetsAt)))") {}
         }
 
         if state.fiveHourUtil != nil || state.sevenDayUtil != nil {
@@ -28,19 +28,19 @@ struct MenuBarView: View {
             Divider()
         }
 
-        Button("📈 查看趋势") {
+        Button("📈 Trend") {
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "trend")
         }
 
         Divider()
 
-        Button("⟳ 刷新") {
+        Button("⟳ Refresh") {
             Task { await state.refresh() }
         }
         .disabled(state.isLoading)
 
-        Button("⚙ 设置...") {
+        Button("⚙ Settings...") {
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "settings")
         }
@@ -54,7 +54,7 @@ struct MenuBarView: View {
 
         Divider()
 
-        Button("退出") {
+        Button("Quit") {
             NSApplication.shared.terminate(nil)
         }
     }
