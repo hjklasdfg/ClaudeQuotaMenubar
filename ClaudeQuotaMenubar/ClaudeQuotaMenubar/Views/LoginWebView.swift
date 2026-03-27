@@ -85,20 +85,34 @@ struct LoginWebView: NSViewRepresentable {
 
         private func checkForSessionKey(in cookieStore: WKHTTPCookieStore) async {
             let cookies = await cookieStore.allCookies()
+
+            // Debug: log all cookie names from claude.ai
+            let claudeCookies = cookies.filter { $0.domain.contains("claude.ai") }
+            print("[LoginWebView] claude.ai cookies: \(claudeCookies.map { "\($0.name)=\($0.value.prefix(20))..." })")
+
             guard let sessionCookie = cookies.first(where: {
                 $0.name == "sessionKey" && $0.value.hasPrefix("sk-ant-sid01-")
-            }) else { return }
+            }) else {
+                // Also check without prefix requirement
+                if let anyCookie = cookies.first(where: { $0.name == "sessionKey" }) {
+                    print("[LoginWebView] Found sessionKey but wrong prefix: \(anyCookie.value.prefix(30))...")
+                }
+                return
+            }
 
+            print("[LoginWebView] sessionKey found! Saving to Keychain...")
             hasCompleted = true
             keychain.save(account: "sessionKey", value: sessionCookie.value)
 
-            // Small delay for page to stabilize
             try? await Task.sleep(for: .seconds(2))
             await fetchOrganizationId()
         }
 
         private func fetchOrganizationId() async {
-            guard let webView else { return }
+            guard let webView else {
+                print("[LoginWebView] fetchOrganizationId: webView is nil!")
+                return
+            }
 
             let js = """
                 try {
@@ -114,17 +128,22 @@ struct LoginWebView: NSViewRepresentable {
                 }
             """
 
+            print("[LoginWebView] Fetching organizations...")
             do {
                 let result = try await webView.callAsyncJavaScript(
                     js, arguments: [:], contentWorld: .page
                 )
-                if let jsonString = result as? String,
-                   let orgId = LoginCredentialExtractor.parseOrganizationId(from: jsonString) {
+                let jsonString = result as? String ?? "nil"
+                print("[LoginWebView] Org response: \(jsonString.prefix(200))")
+                if let orgId = LoginCredentialExtractor.parseOrganizationId(from: jsonString) {
+                    print("[LoginWebView] orgId found: \(orgId)")
                     keychain.save(account: "organizationId", value: orgId)
                     onLoginSuccess()
+                } else {
+                    print("[LoginWebView] Failed to parse orgId from response")
                 }
             } catch {
-                // Org fetch failed — user can use manual entry as fallback
+                print("[LoginWebView] JS error: \(error)")
             }
         }
     }
