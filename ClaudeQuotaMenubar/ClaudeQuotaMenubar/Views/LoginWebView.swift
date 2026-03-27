@@ -118,7 +118,10 @@ struct LoginWebView: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil {
-                webView.load(navigationAction.request)
+                let request = navigationAction.request
+                Task { @MainActor in
+                    webView.load(request)
+                }
             }
             return nil
         }
