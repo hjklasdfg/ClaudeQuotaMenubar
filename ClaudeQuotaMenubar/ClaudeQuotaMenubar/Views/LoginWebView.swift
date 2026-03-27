@@ -103,9 +103,11 @@ struct LoginWebView: NSViewRepresentable {
                    let orgId = LoginCredentialExtractor.parseOrganizationId(from: jsonString) {
                     keychain.save(account: "organizationId", value: orgId)
                     onLoginSuccess()
+                } else {
+                    hasCompleted = false // Allow retry on next cookie change
                 }
             } catch {
-                // Org fetch failed — user can retry or use manual entry
+                hasCompleted = false // Allow retry on next cookie change
             }
         }
     }
