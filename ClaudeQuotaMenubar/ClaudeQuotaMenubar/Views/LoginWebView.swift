@@ -42,6 +42,7 @@ struct LoginWebView: NSViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.uiDelegate = context.coordinator
+        webView.navigationDelegate = context.coordinator
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         context.coordinator.webView = webView
 
@@ -52,7 +53,7 @@ struct LoginWebView: NSViewRepresentable {
     }
 
     @MainActor
-    class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKUIDelegate {
+    class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKUIDelegate, WKNavigationDelegate {
         let keychain: KeychainService
         let onLoginSuccess: () -> Void
         weak var webView: WKWebView?
@@ -61,6 +62,51 @@ struct LoginWebView: NSViewRepresentable {
         init(keychain: KeychainService, onLoginSuccess: @escaping () -> Void) {
             self.keychain = keychain
             self.onLoginSuccess = onLoginSuccess
+        }
+
+        // Detect navigation to main page (login success)
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                guard !self.hasCompleted else { return }
+                guard let url = webView.url?.absoluteString else { return }
+                print("[LoginWebView] Page loaded: \(url)")
+
+                // If URL is no longer /login, user has authenticated
+                if url.contains("claude.ai") && !url.contains("/login") {
+                    print("[LoginWebView] Login detected! Dumping ALL cookies...")
+                    let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+                    let cookies = await cookieStore.allCookies()
+                    for cookie in cookies {
+                        print("[LoginWebView]   \(cookie.domain) | \(cookie.name) = \(cookie.value.prefix(30))...")
+                    }
+
+                    // Try to get sessionKey via JavaScript (checks document.cookie + localStorage)
+                    let js = """
+                        (function() {
+                            let info = {
+                                cookies: document.cookie,
+                                url: window.location.href,
+                                localStorage: {}
+                            };
+                            try {
+                                for (let i = 0; i < localStorage.length; i++) {
+                                    let key = localStorage.key(i);
+                                    if (key.toLowerCase().includes('session') || key.toLowerCase().includes('token') || key.toLowerCase().includes('key') || key.toLowerCase().includes('auth')) {
+                                        info.localStorage[key] = localStorage.getItem(key).substring(0, 50);
+                                    }
+                                }
+                            } catch(e) {}
+                            return JSON.stringify(info);
+                        })()
+                    """
+                    do {
+                        let result = try await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
+                        print("[LoginWebView] JS info: \(result ?? "nil")")
+                    } catch {
+                        print("[LoginWebView] JS error: \(error)")
+                    }
+                }
+            }
         }
 
         // Handle OAuth popups
