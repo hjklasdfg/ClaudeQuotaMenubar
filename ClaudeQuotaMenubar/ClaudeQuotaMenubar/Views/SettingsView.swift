@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.openWindow) private var openWindow
     let keychain: KeychainService
     let onSave: () -> Void
+    let onLogout: () -> Void
 
     @State private var sessionKey: String = ""
     @State private var organizationId: String = ""
@@ -31,7 +32,12 @@ struct SettingsView: View {
                     Text(isLoggedIn ? "Logged in" : "Not logged in")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Login with Claude") {
+                    if isLoggedIn {
+                        Button("Log out") {
+                            onLogout()
+                        }
+                    }
+                    Button(isLoggedIn ? "Re-login" : "Login with Claude") {
                         NSApp.activate(ignoringOtherApps: true)
                         openWindow(id: "login")
                     }

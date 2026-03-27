@@ -122,6 +122,22 @@ final class AppState {
         fetcher = QuotaFetcher(sessionKey: sk, organizationId: orgId)
     }
 
+    func logout() {
+        keychain.delete(account: "sessionKey")
+        keychain.delete(account: "organizationId")
+        fetcher?.reset()
+        fetcher = nil
+        fiveHourUtil = nil
+        sevenDayUtil = nil
+        opusUtil = nil
+        sonnetUtil = nil
+        hourlyTrend = nil
+        errorMessage = nil
+        sessionExpired = false
+        consecutiveFailures = 0
+        showLogin = true
+    }
+
     func onCredentialsSaved() {
         sessionExpired = false
         consecutiveFailures = 0
@@ -178,7 +194,7 @@ struct ClaudeQuotaMenubarApp: App {
         }
 
         Window("Claude Quota Settings", id: "settings") {
-            SettingsView(keychain: state.keychain, onSave: state.onCredentialsSaved)
+            SettingsView(keychain: state.keychain, onSave: state.onCredentialsSaved, onLogout: state.logout)
         }
         .windowResizability(.contentSize)
 
