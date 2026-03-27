@@ -40,6 +40,9 @@ struct SettingsView: View {
                     }
                     Button(isLoggedIn ? "Re-login" : "Login with Claude") {
                         onRelogin()
+                        NSApp.setActivationPolicy(.regular)
+                        NSApp.activate(ignoringOtherApps: true)
+                        openWindow(id: "login")
                     }
                 }
                 .padding(8)
