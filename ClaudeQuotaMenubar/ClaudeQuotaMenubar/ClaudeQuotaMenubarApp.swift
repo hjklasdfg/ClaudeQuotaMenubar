@@ -1,19 +1,20 @@
 import SwiftUI
 
 @MainActor
-final class AppState: ObservableObject {
-    @Published var fiveHourUtil: Double?
-    @Published var sevenDayUtil: Double?
-    @Published var opusUtil: Double?
-    @Published var sonnetUtil: Double?
-    @Published var fiveHourResetsAt: String?
-    @Published var sevenDayResetsAt: String?
-    @Published var hourlyTrend: Double?
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var showSettings = false
-    @Published var showTrend = false
-    @Published var consecutiveFailures = 0
+@Observable
+final class AppState {
+    var fiveHourUtil: Double?
+    var sevenDayUtil: Double?
+    var opusUtil: Double?
+    var sonnetUtil: Double?
+    var fiveHourResetsAt: String?
+    var sevenDayResetsAt: String?
+    var hourlyTrend: Double?
+    var isLoading = false
+    var errorMessage: String?
+    var showSettings = false
+    var showTrend = false
+    var consecutiveFailures = 0
 
     let keychain = KeychainService()
     var store: QuotaStore?
@@ -116,17 +117,32 @@ final class AppState: ObservableObject {
         Task { await refresh() }
     }
 
+    func parseResetDate(_ isoString: String?) -> Date? {
+        guard let isoString else { return nil }
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: isoString) { return date }
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        return isoFormatter.date(from: isoString)
+    }
+
     func formatResetTime(_ isoString: String?) -> String {
-        guard let isoString, let date = ISO8601DateFormatter().date(from: isoString) else { return "" }
+        guard let date = parseResetDate(isoString) else { return "" }
+
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
             let formatter = DateFormatter()
             formatter.dateFormat = "HH:mm"
             return formatter.string(from: date)
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "M/d"
-            return formatter.string(from: date)
+            let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: calendar.startOfDay(for: date)).day ?? 0
+            if days > 0 {
+                return "\(days) 天后"
+            } else {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "M/d"
+                return formatter.string(from: date)
+            }
         }
     }
 
@@ -139,19 +155,14 @@ final class AppState: ObservableObject {
 
 @main
 struct ClaudeQuotaMenubarApp: App {
-    @StateObject private var state = AppState()
+    @State private var state = AppState()
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarView(state: state)
         } label: {
-            HStack(spacing: 2) {
-                Image(systemName: "circle.fill")
-                    .foregroundColor(state.statusColor)
-                    .imageScale(.small)
-                Text(state.statusText)
-                    .monospacedDigit()
-            }
+            Text("C \(state.statusText)")
+                .monospacedDigit()
         }
 
         Window("Claude Quota Settings", id: "settings") {

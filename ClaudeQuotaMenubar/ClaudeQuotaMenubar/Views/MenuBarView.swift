@@ -1,16 +1,16 @@
 import SwiftUI
 
 struct MenuBarView: View {
-    @ObservedObject var state: AppState
+    var state: AppState
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         if let fiveHour = state.fiveHourUtil {
-            Text("5 小时用量：\(Int(fiveHour))%\(state.trendText())（重置：\(state.formatResetTime(state.fiveHourResetsAt))）")
+            Button("5 小时用量：\(Int(fiveHour))%\(state.trendText())（重置：\(state.formatResetTime(state.fiveHourResetsAt))）") {}
         }
 
         if let sevenDay = state.sevenDayUtil {
-            Text("7 天用量：\(Int(sevenDay))%（重置：\(state.formatResetTime(state.sevenDayResetsAt))）")
+            Button("7 天用量：\(Int(sevenDay))%（重置：\(state.formatResetTime(state.sevenDayResetsAt))）") {}
         }
 
         if state.fiveHourUtil != nil || state.sevenDayUtil != nil {
@@ -18,10 +18,10 @@ struct MenuBarView: View {
         }
 
         if let opus = state.opusUtil {
-            Text("Opus (7d)：\(Int(opus))%")
+            Button("Opus (7d)：\(Int(opus))%") {}
         }
         if let sonnet = state.sonnetUtil {
-            Text("Sonnet (7d)：\(Int(sonnet))%")
+            Button("Sonnet (7d)：\(Int(sonnet))%") {}
         }
 
         if state.opusUtil != nil || state.sonnetUtil != nil {
@@ -29,6 +29,7 @@ struct MenuBarView: View {
         }
 
         Button("📈 查看趋势") {
+            NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "trend")
         }
 
@@ -40,6 +41,7 @@ struct MenuBarView: View {
         .disabled(state.isLoading)
 
         Button("⚙ 设置...") {
+            NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "settings")
         }
 

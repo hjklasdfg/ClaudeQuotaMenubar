@@ -4,7 +4,6 @@ import WebKit
 @MainActor
 final class QuotaFetcher: NSObject {
     private var webView: WKWebView?
-    private var continuation: CheckedContinuation<UsageResponse, Error>?
     private let sessionKey: String
     private let organizationId: String
 
@@ -16,7 +15,7 @@ final class QuotaFetcher: NSObject {
 
     func fetch() async throws -> UsageResponse {
         if webView == nil {
-            webView = createWebView()
+            webView = try await createWebView()
         }
 
         try await navigateToClaude()
@@ -42,7 +41,7 @@ final class QuotaFetcher: NSObject {
 
     // MARK: - Private
 
-    private func createWebView() -> WKWebView {
+    private func createWebView() async throws -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
 
@@ -66,10 +65,9 @@ final class QuotaFetcher: NSObject {
             .secure: "TRUE",
         ])!
 
-        Task {
-            await cookieStore.setCookie(sessionCookie)
-            await cookieStore.setCookie(orgCookie)
-        }
+        // Wait for cookies to be set before returning
+        await cookieStore.setCookie(sessionCookie)
+        await cookieStore.setCookie(orgCookie)
 
         return wv
     }
@@ -93,28 +91,30 @@ final class QuotaFetcher: NSObject {
         let url = "https://claude.ai/api/organizations/\(organizationId)/usage"
 
         let js = """
-            (async () => {
-                try {
-                    const response = await fetch('\(url)', {
-                        method: 'GET',
-                        credentials: 'include',
-                        headers: {
-                            'accept': '*/*',
-                            'anthropic-client-platform': 'web_claude_ai'
-                        }
-                    });
-                    if (!response.ok) {
-                        return JSON.stringify({ error: response.status + ' ' + response.statusText });
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'accept': '*/*',
+                        'anthropic-client-platform': 'web_claude_ai'
                     }
-                    const data = await response.json();
-                    return JSON.stringify(data);
-                } catch (e) {
-                    return JSON.stringify({ error: e.message });
+                });
+                if (!response.ok) {
+                    return JSON.stringify({ error: response.status + ' ' + response.statusText });
                 }
-            })()
+                const data = await response.json();
+                return JSON.stringify(data);
+            } catch (e) {
+                return JSON.stringify({ error: e.message });
+            }
         """
 
-        let result = try await webView.evaluateJavaScript(js)
+        let result = try await webView.callAsyncJavaScript(
+            js,
+            arguments: ["apiUrl": url],
+            contentWorld: .page
+        )
 
         guard let jsonString = result as? String else {
             throw QuotaFetcherError.invalidResponse
@@ -165,8 +165,8 @@ enum QuotaFetcherError: LocalizedError {
         switch self {
         case .noWebView: return "WebView not initialized"
         case .invalidResponse: return "Invalid response from API"
-        case .htmlResponse: return "Received HTML instead of JSON (likely Cloudflare block)"
-        case .apiFailed(let msg): return "API error: \(msg)"
+        case .htmlResponse: return "Received HTML (Cloudflare block)"
+        case .apiFailed(let msg): return "API: \(msg)"
         }
     }
 }
