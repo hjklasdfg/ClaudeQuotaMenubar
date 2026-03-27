@@ -76,6 +76,17 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                     }
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("How to find these values:")
+                            .font(.subheadline).fontWeight(.medium)
+                        Text("1. Open browser → claude.ai → log in")
+                        Text("2. Open DevTools (F12) → Application → Cookies → claude.ai")
+                        Text("3. Copy the sessionKey value (starts with sk-ant-sid01-)")
+                        Text("4. For Org ID: Network tab → filter 'organizations' → copy UUID from URL")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                     HStack {
                         Spacer()
                         Button("Save Credentials") {
