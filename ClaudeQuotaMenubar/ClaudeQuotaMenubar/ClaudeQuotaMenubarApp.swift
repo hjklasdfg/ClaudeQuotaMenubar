@@ -140,6 +140,11 @@ final class AppState {
         showLogin = true
     }
 
+    func relogin() {
+        loginRefreshId = UUID()
+        showLogin = true
+    }
+
     func onCredentialsSaved() {
         sessionExpired = false
         consecutiveFailures = 0
@@ -196,7 +201,7 @@ struct ClaudeQuotaMenubarApp: App {
         }
 
         Window("Claude Quota Settings", id: "settings") {
-            SettingsView(keychain: state.keychain, onSave: state.onCredentialsSaved, onLogout: state.logout)
+            SettingsView(keychain: state.keychain, onSave: state.onCredentialsSaved, onLogout: state.logout, onRelogin: state.relogin)
         }
         .windowResizability(.contentSize)
 

@@ -7,6 +7,7 @@ struct SettingsView: View {
     let keychain: KeychainService
     let onSave: () -> Void
     let onLogout: () -> Void
+    let onRelogin: () -> Void
 
     @State private var sessionKey: String = ""
     @State private var organizationId: String = ""
@@ -38,8 +39,7 @@ struct SettingsView: View {
                         }
                     }
                     Button(isLoggedIn ? "Re-login" : "Login with Claude") {
-                        NSApp.activate(ignoringOtherApps: true)
-                        openWindow(id: "login")
+                        onRelogin()
                     }
                 }
                 .padding(8)

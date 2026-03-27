@@ -21,61 +21,52 @@ enum LoginCredentialExtractor {
 struct LoginWebView: NSViewRepresentable {
     let keychain: KeychainService
     let onLoginSuccess: () -> Void
-    let refreshId: UUID  // Change this to force a new WebView
+    let refreshId: UUID
 
     func makeCoordinator() -> Coordinator {
         Coordinator(keychain: keychain, onLoginSuccess: onLoginSuccess)
     }
 
     func makeNSView(context: Context) -> WKWebView {
-        createAndLoadWebView(context: context)
-    }
-
-    func updateNSView(_ nsView: WKWebView, context: Context) {
-        // When refreshId changes, rebuild the WebView
-        if context.coordinator.currentRefreshId != refreshId {
-            context.coordinator.currentRefreshId = refreshId
-            context.coordinator.hasCompleted = false
-
-            let config = nsView.configuration
-            let cookieStore = config.websiteDataStore.httpCookieStore
-
-            Task {
-                // Clear all claude.ai cookies
-                let cookies = await cookieStore.allCookies()
-                for cookie in cookies where cookie.domain.contains("claude.ai") {
-                    await cookieStore.deleteCookie(cookie)
-                }
-                let url = URL(string: "https://claude.ai/login")!
-                nsView.load(URLRequest(url: url))
-            }
-        }
-    }
-
-    private func createAndLoadWebView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.uiDelegate = context.coordinator
-        webView.navigationDelegate = context.coordinator
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         context.coordinator.webView = webView
         context.coordinator.currentRefreshId = refreshId
 
+        webView.navigationDelegate = context.coordinator
+
         let cookieStore = config.websiteDataStore.httpCookieStore
         cookieStore.add(context.coordinator)
 
-        Task {
+        cleanAndLoad(webView: webView, cookieStore: cookieStore)
+
+        return webView
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        guard context.coordinator.currentRefreshId != refreshId else { return }
+        context.coordinator.currentRefreshId = refreshId
+        context.coordinator.hasCompleted = false
+        context.coordinator.isCleaningUp = true
+
+        let cookieStore = nsView.configuration.websiteDataStore.httpCookieStore
+        cleanAndLoad(webView: nsView, cookieStore: cookieStore)
+    }
+
+    private func cleanAndLoad(webView: WKWebView, cookieStore: WKHTTPCookieStore) {
+        Task { @MainActor in
             let cookies = await cookieStore.allCookies()
             for cookie in cookies where cookie.domain.contains("claude.ai") {
                 await cookieStore.deleteCookie(cookie)
             }
-            let url = URL(string: "https://claude.ai/login")!
-            webView.load(URLRequest(url: url))
+            // Small delay to ensure cookies are fully cleared
+            try? await Task.sleep(for: .milliseconds(100))
+            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
         }
-
-        return webView
     }
 
     @MainActor
@@ -85,13 +76,14 @@ struct LoginWebView: NSViewRepresentable {
         weak var webView: WKWebView?
         var hasCompleted = false
         var currentRefreshId: UUID?
+        var isCleaningUp = true  // Don't check cookies during cleanup
 
         init(keychain: KeychainService, onLoginSuccess: @escaping () -> Void) {
             self.keychain = keychain
             self.onLoginSuccess = onLoginSuccess
         }
 
-        // Handle OAuth popups (e.g., Google login opens a new window)
+        // Handle OAuth popups
         nonisolated func webView(
             _ webView: WKWebView,
             createWebViewWith configuration: WKWebViewConfiguration,
@@ -104,20 +96,16 @@ struct LoginWebView: NSViewRepresentable {
             return nil
         }
 
-        // After page finishes loading, check if already logged in
+        // Enable cookie monitoring once login page has loaded
         nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { @MainActor in
-                guard let url = webView.url?.absoluteString else { return }
-                // If we landed on the main page (not /login), user is already authenticated
-                if !url.contains("/login") && url.contains("claude.ai") {
-                    let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
-                    await self.checkForSessionKey(in: cookieStore)
-                }
+                self.isCleaningUp = false
             }
         }
 
         nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
             Task { @MainActor in
+                guard !self.isCleaningUp, !self.hasCompleted else { return }
                 await self.checkForSessionKey(in: cookieStore)
             }
         }
@@ -133,10 +121,12 @@ struct LoginWebView: NSViewRepresentable {
             hasCompleted = true
             keychain.save(account: "sessionKey", value: sessionCookie.value)
 
-            await fetchOrganizationId(sessionKey: sessionCookie.value)
+            // Wait a moment for the page to stabilize before fetching org
+            try? await Task.sleep(for: .seconds(1))
+            await fetchOrganizationId()
         }
 
-        private func fetchOrganizationId(sessionKey: String) async {
+        private func fetchOrganizationId() async {
             guard let webView else { return }
 
             let js = """
@@ -161,12 +151,16 @@ struct LoginWebView: NSViewRepresentable {
                    let orgId = LoginCredentialExtractor.parseOrganizationId(from: jsonString) {
                     keychain.save(account: "organizationId", value: orgId)
                     onLoginSuccess()
-                } else {
-                    hasCompleted = false
                 }
+                // If org fetch fails, don't retry — user can use manual entry
             } catch {
-                hasCompleted = false
+                // Don't reset hasCompleted — avoid retry loops
             }
+        }
+
+        /// Called after login page finishes loading to enable cookie monitoring
+        func enableCookieMonitoring() {
+            isCleaningUp = false
         }
     }
 }
