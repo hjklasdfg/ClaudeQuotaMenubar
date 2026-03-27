@@ -33,12 +33,19 @@ struct LoginWebView: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: config)
         context.coordinator.webView = webView
 
-        // Observe cookie changes
-        config.websiteDataStore.httpCookieStore.add(context.coordinator)
+        // Clear stale cookies before login
+        let cookieStore = config.websiteDataStore.httpCookieStore
+        cookieStore.add(context.coordinator)
 
-        // Load login page
-        let url = URL(string: "https://claude.ai/login")!
-        webView.load(URLRequest(url: url))
+        Task {
+            let cookies = await cookieStore.allCookies()
+            for cookie in cookies where cookie.domain.contains("claude.ai") {
+                await cookieStore.deleteCookie(cookie)
+            }
+            // Load login page after cleanup
+            let url = URL(string: "https://claude.ai/login")!
+            webView.load(URLRequest(url: url))
+        }
 
         return webView
     }
