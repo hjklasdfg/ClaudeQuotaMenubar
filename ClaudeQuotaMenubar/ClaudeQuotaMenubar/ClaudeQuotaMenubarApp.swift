@@ -36,12 +36,13 @@ final class AppState {
         }
 
         // Hide from Dock when all windows are closed
+        let knownTitles: Set = ["Claude Quota Settings", "Usage Trend", "Login to Claude"]
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
         ) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let hasVisibleWindows = NSApp.windows.contains { $0.isVisible && $0.title != "" }
-                if !hasVisibleWindows {
+                let hasAppWindows = NSApp.windows.contains { $0.isVisible && knownTitles.contains($0.title) }
+                if !hasAppWindows {
                     NSApp.setActivationPolicy(.accessory)
                 }
             }
