@@ -15,6 +15,7 @@ final class AppState {
     var showSettings = false
     var showTrend = false
     var showLogin = false
+    var loginRefreshId = UUID()
     var consecutiveFailures = 0
     var sessionExpired = false
 
@@ -135,6 +136,7 @@ final class AppState {
         errorMessage = nil
         sessionExpired = false
         consecutiveFailures = 0
+        loginRefreshId = UUID()
         showLogin = true
     }
 
@@ -207,9 +209,10 @@ struct ClaudeQuotaMenubarApp: App {
             LoginWebView(keychain: state.keychain, onLoginSuccess: {
                 state.onCredentialsSaved()
                 state.showLogin = false
-                // Close the login window
                 NSApp.windows.first { $0.title == "Login to Claude" }?.close()
-            })
+                // Hide from Dock after login completes
+                NSApp.setActivationPolicy(.accessory)
+            }, refreshId: state.loginRefreshId)
             .frame(minWidth: 800, minHeight: 700)
         }
         .windowResizability(.contentMinSize)

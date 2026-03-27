@@ -61,6 +61,8 @@ struct MenuBarView: View {
         }
         .onChange(of: state.showLogin) { _, shouldShow in
             if shouldShow {
+                // Show in Dock so user can Cmd+Tab to login window
+                NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "login")
                 state.showLogin = false

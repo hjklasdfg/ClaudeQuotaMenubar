@@ -21,21 +21,48 @@ enum LoginCredentialExtractor {
 struct LoginWebView: NSViewRepresentable {
     let keychain: KeychainService
     let onLoginSuccess: () -> Void
+    let refreshId: UUID  // Change this to force a new WebView
 
     func makeCoordinator() -> Coordinator {
         Coordinator(keychain: keychain, onLoginSuccess: onLoginSuccess)
     }
 
     func makeNSView(context: Context) -> WKWebView {
+        createAndLoadWebView(context: context)
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        // When refreshId changes, rebuild the WebView
+        if context.coordinator.currentRefreshId != refreshId {
+            context.coordinator.currentRefreshId = refreshId
+            context.coordinator.hasCompleted = false
+
+            let config = nsView.configuration
+            let cookieStore = config.websiteDataStore.httpCookieStore
+
+            Task {
+                // Clear all claude.ai cookies
+                let cookies = await cookieStore.allCookies()
+                for cookie in cookies where cookie.domain.contains("claude.ai") {
+                    await cookieStore.deleteCookie(cookie)
+                }
+                let url = URL(string: "https://claude.ai/login")!
+                nsView.load(URLRequest(url: url))
+            }
+        }
+    }
+
+    private func createAndLoadWebView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.uiDelegate = context.coordinator
+        webView.navigationDelegate = context.coordinator
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         context.coordinator.webView = webView
+        context.coordinator.currentRefreshId = refreshId
 
-        // Clear stale cookies before login
         let cookieStore = config.websiteDataStore.httpCookieStore
         cookieStore.add(context.coordinator)
 
@@ -44,7 +71,6 @@ struct LoginWebView: NSViewRepresentable {
             for cookie in cookies where cookie.domain.contains("claude.ai") {
                 await cookieStore.deleteCookie(cookie)
             }
-            // Load login page after cleanup
             let url = URL(string: "https://claude.ai/login")!
             webView.load(URLRequest(url: url))
         }
@@ -52,14 +78,13 @@ struct LoginWebView: NSViewRepresentable {
         return webView
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
-
     @MainActor
-    class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKUIDelegate {
+    class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKUIDelegate, WKNavigationDelegate {
         let keychain: KeychainService
         let onLoginSuccess: () -> Void
         weak var webView: WKWebView?
-        private var hasCompleted = false
+        var hasCompleted = false
+        var currentRefreshId: UUID?
 
         init(keychain: KeychainService, onLoginSuccess: @escaping () -> Void) {
             self.keychain = keychain
@@ -73,11 +98,22 @@ struct LoginWebView: NSViewRepresentable {
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            // Load popup URLs in the same WebView instead of opening a new window
             if navigationAction.targetFrame == nil {
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        // After page finishes loading, check if already logged in
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Task { @MainActor in
+                guard let url = webView.url?.absoluteString else { return }
+                // If we landed on the main page (not /login), user is already authenticated
+                if !url.contains("/login") && url.contains("claude.ai") {
+                    let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+                    await self.checkForSessionKey(in: cookieStore)
+                }
+            }
         }
 
         nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
@@ -86,7 +122,7 @@ struct LoginWebView: NSViewRepresentable {
             }
         }
 
-        private func checkForSessionKey(in cookieStore: WKHTTPCookieStore) async {
+        func checkForSessionKey(in cookieStore: WKHTTPCookieStore) async {
             guard !hasCompleted else { return }
 
             let cookies = await cookieStore.allCookies()
@@ -97,7 +133,6 @@ struct LoginWebView: NSViewRepresentable {
             hasCompleted = true
             keychain.save(account: "sessionKey", value: sessionCookie.value)
 
-            // Fetch organization ID
             await fetchOrganizationId(sessionKey: sessionCookie.value)
         }
 
@@ -127,10 +162,10 @@ struct LoginWebView: NSViewRepresentable {
                     keychain.save(account: "organizationId", value: orgId)
                     onLoginSuccess()
                 } else {
-                    hasCompleted = false // Allow retry on next cookie change
+                    hasCompleted = false
                 }
             } catch {
-                hasCompleted = false // Allow retry on next cookie change
+                hasCompleted = false
             }
         }
     }
