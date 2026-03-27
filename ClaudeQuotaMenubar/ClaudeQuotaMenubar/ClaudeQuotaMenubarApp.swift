@@ -215,9 +215,9 @@ struct ClaudeQuotaMenubarApp: App {
                 state.onCredentialsSaved()
                 state.showLogin = false
                 NSApp.windows.first { $0.title == "Login to Claude" }?.close()
-                // Hide from Dock after login completes
                 NSApp.setActivationPolicy(.accessory)
-            }, refreshId: state.loginRefreshId)
+            })
+            .id(state.loginRefreshId) // Force new WebView on each login attempt
             .frame(minWidth: 800, minHeight: 700)
         }
         .windowResizability(.contentMinSize)
