@@ -43,7 +43,7 @@ C 58%
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/RockyLi1986/ClaudeQuotaMenubar.git
+   git clone https://github.com/hjklasdfg/ClaudeQuotaMenubar.git
    ```
 
 2. Open in Xcode:
