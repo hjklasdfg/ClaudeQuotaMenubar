@@ -34,6 +34,18 @@ final class AppState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             self?.startPolling()
         }
+
+        // Hide from Dock when all windows are closed
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: nil, queue: .main
+        ) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let hasVisibleWindows = NSApp.windows.contains { $0.isVisible && $0.title != "" }
+                if !hasVisibleWindows {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+            }
+        }
     }
 
     var statusText: String {

@@ -30,6 +30,7 @@ struct MenuBarView: View {
             }
 
             Button("📈 Trend") {
+                NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "trend")
             }
@@ -42,6 +43,7 @@ struct MenuBarView: View {
             .disabled(state.isLoading)
 
             Button("⚙ Settings...") {
+                NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "settings")
             }
