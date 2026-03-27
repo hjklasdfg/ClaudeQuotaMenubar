@@ -31,6 +31,7 @@ struct LoginWebView: NSViewRepresentable {
         config.websiteDataStore = .default()
 
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.uiDelegate = context.coordinator
         context.coordinator.webView = webView
 
         // Clear stale cookies before login
@@ -53,7 +54,7 @@ struct LoginWebView: NSViewRepresentable {
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 
     @MainActor
-    class Coordinator: NSObject, WKHTTPCookieStoreObserver {
+    class Coordinator: NSObject, WKHTTPCookieStoreObserver, WKUIDelegate {
         let keychain: KeychainService
         let onLoginSuccess: () -> Void
         weak var webView: WKWebView?
@@ -62,6 +63,20 @@ struct LoginWebView: NSViewRepresentable {
         init(keychain: KeychainService, onLoginSuccess: @escaping () -> Void) {
             self.keychain = keychain
             self.onLoginSuccess = onLoginSuccess
+        }
+
+        // Handle OAuth popups (e.g., Google login opens a new window)
+        nonisolated func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            // Load popup URLs in the same WebView instead of opening a new window
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+            }
+            return nil
         }
 
         nonisolated func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
