@@ -46,7 +46,7 @@ struct SettingsView: View {
             }
 
             // MARK: - Advanced Section
-            DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
+            DisclosureGroup(isExpanded: $showAdvanced) {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Session Key")
@@ -84,6 +84,15 @@ struct SettingsView: View {
                     }
                 }
                 .padding(8)
+            } label: {
+                Text("Advanced")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation {
+                            showAdvanced.toggle()
+                        }
+                    }
             }
 
             // MARK: - General Section
