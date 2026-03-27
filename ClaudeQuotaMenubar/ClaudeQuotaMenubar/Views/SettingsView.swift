@@ -82,7 +82,10 @@ struct SettingsView: View {
                         Text("1. Open browser → claude.ai → log in")
                         Text("2. Open DevTools (F12) → Application → Cookies → claude.ai")
                         Text("3. Copy the sessionKey value (starts with sk-ant-sid01-)")
-                        Text("4. For Org ID: Network tab → filter 'organizations' → copy UUID from URL")
+                        Text("4. For Org ID: Console tab → paste and run:")
+                        Text("fetch('/api/organizations').then(r=>r.json()).then(d=>console.log(d[0].uuid))")
+                            .textSelection(.enabled)
+                            .font(.system(.caption, design: .monospaced))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
