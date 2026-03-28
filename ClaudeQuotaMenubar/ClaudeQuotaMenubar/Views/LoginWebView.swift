@@ -36,19 +36,26 @@ struct LoginWebView: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.startObservingURL()
 
-        // First load claude.ai to get a valid page context, then logout via JS + redirect to /login
-        webView.load(URLRequest(url: URL(string: "https://claude.ai/api/auth/logout")!))
+        // Load login page, then use JS to logout first if there's an existing session
+        webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
 
-        // After logout completes, redirect to login page
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            // Also clean session cookies from store
+            // POST to logout API to clear server session, then reload login
+            let js = """
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                } catch(e) {}
+                window.location.href = '/login';
+            """
+            try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
+
+            // Clean session cookies from store
             let cookieStore = config.websiteDataStore.httpCookieStore
             let cookies = await cookieStore.allCookies()
             for cookie in cookies where cookie.name.contains("sessionKey") {
                 await cookieStore.deleteCookie(cookie)
             }
-            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
         }
 
         return webView
