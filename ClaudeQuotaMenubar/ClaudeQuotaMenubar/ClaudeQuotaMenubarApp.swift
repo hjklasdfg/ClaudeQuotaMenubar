@@ -150,8 +150,6 @@ final class AppState {
         errorMessage = nil
         sessionExpired = false
         consecutiveFailures = 0
-        loginRefreshId = UUID()
-        showLogin = true
     }
 
     func relogin() {
