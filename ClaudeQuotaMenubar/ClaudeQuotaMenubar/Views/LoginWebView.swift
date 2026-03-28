@@ -36,11 +36,16 @@ struct LoginWebView: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.startObservingURL()
 
-        // Clear session cookie (but keep cf_clearance for Cloudflare) then load login
-        let cookieStore = config.websiteDataStore.httpCookieStore
+        // First load claude.ai to get a valid page context, then logout via JS + redirect to /login
+        webView.load(URLRequest(url: URL(string: "https://claude.ai/api/auth/logout")!))
+
+        // After logout completes, redirect to login page
         Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            // Also clean session cookies from store
+            let cookieStore = config.websiteDataStore.httpCookieStore
             let cookies = await cookieStore.allCookies()
-            for cookie in cookies where cookie.name == "sessionKey" || cookie.name == "lastActiveOrg" {
+            for cookie in cookies where cookie.name.contains("sessionKey") {
                 await cookieStore.deleteCookie(cookie)
             }
             webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
@@ -75,7 +80,10 @@ struct LoginWebView: NSViewRepresentable {
 
         private func handleURLChange(_ url: String) async {
             guard !hasCompleted else { return }
-            guard url.contains("claude.ai"), !url.contains("/login") else { return }
+            // Ignore non-claude.ai URLs and the login/logout pages
+            guard url.contains("claude.ai"),
+                  !url.contains("/login"),
+                  !url.contains("/api/auth") else { return }
 
             print("[LoginWebView] Login success detected! URL: \(url)")
             hasCompleted = true
@@ -92,8 +100,8 @@ struct LoginWebView: NSViewRepresentable {
                     return
                 }
             }
-            print("[LoginWebView] Failed to extract credentials after 5 attempts")
-            hasCompleted = false // Allow retry on next URL change
+            print("[LoginWebView] Failed after 5 attempts — use Settings > Advanced for manual entry")
+            // Don't reset hasCompleted — prevents infinite loop
         }
 
         private func extractCredentials() async {
