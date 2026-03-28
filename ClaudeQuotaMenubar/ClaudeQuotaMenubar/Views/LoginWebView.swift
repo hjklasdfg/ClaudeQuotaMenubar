@@ -48,7 +48,7 @@ struct LoginWebView: NSViewRepresentable {
                     } catch(e) {}
                     window.location.href = '/login';
                 """
-                try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
+                _ = try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
                 let cookieStore = config.websiteDataStore.httpCookieStore
                 let cookies = await cookieStore.allCookies()
                 for cookie in cookies where cookie.name.contains("sessionKey") {
