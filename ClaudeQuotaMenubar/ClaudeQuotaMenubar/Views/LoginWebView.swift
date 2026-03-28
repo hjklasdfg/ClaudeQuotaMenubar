@@ -36,7 +36,16 @@ struct LoginWebView: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.startObservingURL()
 
-        webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
+        // Clear session cookie (but keep cf_clearance for Cloudflare) then load login
+        let cookieStore = config.websiteDataStore.httpCookieStore
+        Task { @MainActor in
+            let cookies = await cookieStore.allCookies()
+            for cookie in cookies where cookie.name == "sessionKey" || cookie.name == "lastActiveOrg" {
+                await cookieStore.deleteCookie(cookie)
+            }
+            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
+        }
+
         return webView
     }
 
