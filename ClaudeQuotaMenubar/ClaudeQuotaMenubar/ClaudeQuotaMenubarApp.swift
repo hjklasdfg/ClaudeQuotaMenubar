@@ -158,6 +158,10 @@ final class AppState {
         sessionExpired = false
         consecutiveFailures = 0
         checkLoginState()
+
+        // Prepare for next login: force logout from WebView session
+        loginForceLogout = true
+        loginRefreshId = UUID()
     }
 
     func relogin() {
