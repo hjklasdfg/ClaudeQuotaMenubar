@@ -10,6 +10,7 @@ A native macOS menu bar app that displays your Claude Pro/Max subscription usage
 - **Detailed breakdown** — 5-hour / 7-day / Opus / Sonnet usage
 - **Hourly trend** — Shows usage change in the last hour
 - **Trend chart** — Line graph with 24h / 7d / 30d time ranges (SwiftUI Charts)
+- **In-app login** — Log in to claude.ai directly within the app (email login supported)
 - **Auto refresh** — Polls every 5 minutes + manual refresh
 - **Launch at login** — Optional via macOS ServiceManagement
 - **Secure storage** — Credentials stored in macOS Keychain
@@ -58,24 +59,26 @@ C 58%
 
 ## Setup
 
-On first launch, you need to provide your claude.ai credentials:
+### Option 1: In-app Login (Recommended)
 
-### Get your Session Key
+1. Click the menu bar icon → Settings → **Login with Claude**
+2. Log in with your email (enter email → check inbox for verification code)
+3. After login, credentials are extracted automatically
 
-1. Open your browser and go to [claude.ai](https://claude.ai)
-2. Open DevTools (F12) → Application → Cookies → `claude.ai`
-3. Find `sessionKey` — the value starts with `sk-ant-sid01-`
+> **Note:** Google login may not work in the embedded browser due to passkey/2FA restrictions. Use email login instead.
 
-### Get your Organization ID
+### Option 2: Manual Entry
 
-1. In DevTools → Network tab
-2. Click on any request to claude.ai
-3. Look at the Request URL — it contains `organizations/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/`
-4. Copy that UUID
+If in-app login doesn't work, you can enter credentials manually:
 
-### Enter credentials
-
-Click the menu bar icon → Settings → paste both values → Save.
+1. Open your browser and go to [claude.ai](https://claude.ai) and log in
+2. Open DevTools (F12) → **Application** → **Cookies** → `claude.ai`
+3. Find `sessionKey` — the value starts with `sk-ant-sid02-`
+4. For Organization ID, go to **Console** tab and run:
+   ```js
+   fetch('/api/organizations').then(r=>r.json()).then(d=>console.log(d[0].uuid))
+   ```
+5. Click the menu bar icon → Settings → expand **Advanced** → paste both values → Save
 
 ## How it works
 
@@ -99,7 +102,7 @@ Usage history is stored locally in SQLite (`~/Library/Application Support/Claude
 This is an **unofficial** tool. It uses undocumented claude.ai internal APIs that may change at any time without notice. This project is not affiliated with, endorsed by, or sponsored by Anthropic.
 
 - The internal API may change, breaking this app
-- Your session key may expire; you'll need to update it in Settings
+- Your session key may expire; you can re-login from Settings
 - Use at your own risk
 
 ## License
