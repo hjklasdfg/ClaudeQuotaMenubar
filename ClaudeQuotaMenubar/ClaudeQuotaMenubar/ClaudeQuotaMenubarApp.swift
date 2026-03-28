@@ -165,6 +165,9 @@ final class AppState {
     }
 
     func relogin() {
+        // Clear old credentials so extraction gets fresh ones
+        keychain.delete(account: "sessionKey")
+        keychain.delete(account: "organizationId")
         loginForceLogout = true
         loginRefreshId = UUID()
         showLogin = true

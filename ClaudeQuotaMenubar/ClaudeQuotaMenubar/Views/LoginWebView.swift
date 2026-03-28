@@ -35,28 +35,39 @@ struct LoginWebView: NSViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         context.coordinator.webView = webView
-        context.coordinator.startObservingURL()
 
         if forceLogout {
-            // Re-login: logout first, then show login page
-            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
+            // Re-login flow:
+            // 1. Load claude.ai to get page context
+            // 2. JS logout to clear server session
+            // 3. Clear sessionKey cookie
+            // 4. Redirect to /login
+            // 5. THEN start URL observation
+            webView.load(URLRequest(url: URL(string: "https://claude.ai")!))
             Task { @MainActor in
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(3))
+
+                // Logout via JS
                 let js = """
-                    try {
-                        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                    } catch(e) {}
-                    window.location.href = '/login';
+                    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch(e) {}
+                    return 'done';
                 """
                 _ = try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
+
+                // Clear session cookies
                 let cookieStore = config.websiteDataStore.httpCookieStore
                 let cookies = await cookieStore.allCookies()
                 for cookie in cookies where cookie.name.contains("sessionKey") {
                     await cookieStore.deleteCookie(cookie)
                 }
+
+                // Now start observing and navigate to login
+                context.coordinator.startObservingURL()
+                webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
             }
         } else {
-            // First login: just load login page directly
+            // First login: observe immediately and load login page
+            context.coordinator.startObservingURL()
             webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
         }
 
@@ -89,15 +100,14 @@ struct LoginWebView: NSViewRepresentable {
 
         private func handleURLChange(_ url: String) async {
             guard !hasCompleted else { return }
-            // Ignore non-claude.ai URLs and the login/logout pages
             guard url.contains("claude.ai"),
                   !url.contains("/login"),
-                  !url.contains("/api/auth") else { return }
+                  !url.contains("/api/") else { return }
 
             print("[LoginWebView] Login success detected! URL: \(url)")
             hasCompleted = true
 
-            // Retry extraction with increasing delays — cookie may not be set immediately
+            // Retry extraction — sessionKey cookie may be set with a delay
             for attempt in 1...5 {
                 let delay = Double(attempt) * 2
                 try? await Task.sleep(for: .seconds(delay))
@@ -110,16 +120,13 @@ struct LoginWebView: NSViewRepresentable {
                 }
             }
             print("[LoginWebView] Failed after 5 attempts — use Settings > Advanced for manual entry")
-            // Don't reset hasCompleted — prevents infinite loop
         }
 
         private func extractCredentials() async {
             guard let webView else { return }
 
-            // Use JS to get both sessionKey (from cookie) and orgId (from API)
             let js = """
                 async function extractCredentials() {
-                    // Get sessionKey from cookies
                     const cookies = document.cookie.split(';').map(c => c.trim());
                     let sessionKey = null;
                     for (const cookie of cookies) {
@@ -128,19 +135,6 @@ struct LoginWebView: NSViewRepresentable {
                             break;
                         }
                     }
-
-                    // If not in document.cookie, try fetching session info
-                    if (!sessionKey) {
-                        try {
-                            const resp = await fetch('/api/auth/session', {
-                                credentials: 'include'
-                            });
-                            const data = await resp.json();
-                            if (data.sessionKey) sessionKey = data.sessionKey;
-                        } catch(e) {}
-                    }
-
-                    // Get organization ID
                     let orgId = null;
                     try {
                         const resp = await fetch('/api/organizations', {
@@ -152,50 +146,35 @@ struct LoginWebView: NSViewRepresentable {
                             orgId = orgs[0].uuid;
                         }
                     } catch(e) {}
-
                     return JSON.stringify({ sessionKey, orgId });
                 }
                 return await extractCredentials();
             """
 
-            print("[LoginWebView] Extracting credentials via JS...")
             do {
                 let result = try await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
                 guard let jsonString = result as? String,
                       let data = jsonString.data(using: .utf8),
                       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    print("[LoginWebView] Failed to parse JS result: \(result ?? "nil")")
-                    // Try cookie store as fallback
-                    await extractFromCookieStore()
+                    await extractSessionKeyFromCookieStore()
                     return
                 }
-
-                print("[LoginWebView] JS result: \(jsonString.prefix(200))")
 
                 let sessionKey = obj["sessionKey"] as? String
                 let orgId = obj["orgId"] as? String
 
                 if let sk = sessionKey, !sk.isEmpty {
-                    print("[LoginWebView] sessionKey from JS: \(sk.prefix(20))...")
                     keychain.save(account: "sessionKey", value: sk)
                 } else {
-                    print("[LoginWebView] No sessionKey from JS, trying cookie store...")
                     await extractSessionKeyFromCookieStore()
                 }
 
                 if let orgId, !orgId.isEmpty {
-                    print("[LoginWebView] orgId: \(orgId)")
                     keychain.save(account: "organizationId", value: orgId)
                 }
-
             } catch {
-                print("[LoginWebView] JS error: \(error)")
-                await extractFromCookieStore()
+                await extractSessionKeyFromCookieStore()
             }
-        }
-
-        private func extractFromCookieStore() async {
-            await extractSessionKeyFromCookieStore()
         }
 
         private func extractSessionKeyFromCookieStore() async {
@@ -203,12 +182,7 @@ struct LoginWebView: NSViewRepresentable {
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             let cookies = await cookieStore.allCookies()
             if let sk = cookies.first(where: { $0.name == "sessionKey" }) {
-                print("[LoginWebView] sessionKey from cookie store: \(sk.value.prefix(20))...")
                 keychain.save(account: "sessionKey", value: sk.value)
-            } else {
-                print("[LoginWebView] sessionKey not found in cookie store either")
-                let names = cookies.filter { $0.domain.contains("claude.ai") }.map { $0.name }
-                print("[LoginWebView] Available claude.ai cookies: \(names)")
             }
         }
 
