@@ -1,0 +1,92 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Build and archive
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          xcodebuild archive \
+            -project ClaudeQuotaMenubar/ClaudeQuotaMenubar.xcodeproj \
+            -scheme ClaudeQuotaMenubar \
+            -archivePath $RUNNER_TEMP/ClaudeQuotaMenubar.xcarchive \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual
+
+      - name: Export app
+        run: |
+          cat > $RUNNER_TEMP/export.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>destination</key>
+            <string>export</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/ClaudeQuotaMenubar.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist $RUNNER_TEMP/export.plist
+
+      - name: Notarize app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          cd $RUNNER_TEMP/export
+          ditto -c -k --keepParent ClaudeQuotaMenubar.app ClaudeQuotaMenubar.zip
+
+          xcrun notarytool submit ClaudeQuotaMenubar.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APP_PASSWORD" \
+            --team-id "$TEAM_ID" \
+            --wait
+
+          xcrun stapler staple ClaudeQuotaMenubar.app
+
+      - name: Package for release
+        run: |
+          cd $RUNNER_TEMP/export
+          ditto -c -k --keepParent ClaudeQuotaMenubar.app ClaudeQuotaMenubar.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/export/ClaudeQuotaMenubar.zip
+          generate_release_notes: true
