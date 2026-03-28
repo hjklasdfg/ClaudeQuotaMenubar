@@ -1,5 +1,7 @@
 # ClaudeQuotaMenubar
 
+[English](README.md) | [中文](README_CN.md)
+
 A native macOS menu bar app that displays your Claude Pro/Max subscription usage in real-time.
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift](https://img.shields.io/badge/Swift-6-orange) ![License](https://img.shields.io/badge/license-MIT-green)
