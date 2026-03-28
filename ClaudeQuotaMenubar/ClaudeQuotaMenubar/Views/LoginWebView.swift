@@ -204,17 +204,14 @@ struct LoginWebView: NSViewRepresentable {
         }
 
         // Handle OAuth popups
-        nonisolated func webView(
+        func webView(
             _ webView: WKWebView,
             createWebViewWith configuration: WKWebViewConfiguration,
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil {
-                let request = navigationAction.request
-                Task { @MainActor in
-                    webView.load(request)
-                }
+                webView.load(navigationAction.request)
             }
             return nil
         }
