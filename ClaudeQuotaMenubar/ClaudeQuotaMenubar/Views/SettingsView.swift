@@ -36,7 +36,7 @@ struct SettingsView: View {
                         }
                     }
                     Button(isLoggedIn ? "Re-login" : "Login with Claude") {
-                        onRelogin()
+                        if isLoggedIn { onRelogin() }
                         NSApp.setActivationPolicy(.regular)
                         NSApp.activate(ignoringOtherApps: true)
                         openWindow(id: "login")
