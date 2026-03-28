@@ -25,6 +25,7 @@ final class AppState {
     var store: QuotaStore?
     var fetcher: QuotaFetcher?
     private var timer: Timer?
+    private var wakeObserver: NSObjectProtocol?
 
     init() {
         do {
@@ -70,7 +71,17 @@ final class AppState {
         isLoggedIn = keychain.hasCredentials
     }
 
+    func stopPolling() {
+        timer?.invalidate()
+        timer = nil
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
+    }
+
     func startPolling() {
+        stopPolling()
         guard keychain.hasCredentials else {
             showLogin = true
             return
@@ -84,7 +95,7 @@ final class AppState {
         }
         timer?.tolerance = 30
 
-        NSWorkspace.shared.notificationCenter.addObserver(
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
@@ -165,9 +176,13 @@ final class AppState {
     }
 
     func relogin() {
-        // Clear old credentials so extraction gets fresh ones
+        // Stop polling and clear old credentials
+        stopPolling()
+        fetcher?.reset()
+        fetcher = nil
         keychain.delete(account: "sessionKey")
         keychain.delete(account: "organizationId")
+        checkLoginState()
         loginForceLogout = true
         loginRefreshId = UUID()
         showLogin = true

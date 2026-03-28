@@ -2,20 +2,6 @@ import Foundation
 import SwiftUI
 import WebKit
 
-// MARK: - Credential Extraction
-
-enum LoginCredentialExtractor {
-    static func parseOrganizationId(from json: String) -> String? {
-        guard let data = json.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              let first = array.first,
-              let uuid = first["uuid"] as? String else {
-            return nil
-        }
-        return uuid
-    }
-}
-
 // MARK: - LoginWebView
 
 struct LoginWebView: NSViewRepresentable {
@@ -37,31 +23,24 @@ struct LoginWebView: NSViewRepresentable {
         context.coordinator.webView = webView
 
         if forceLogout {
-            // Re-login flow:
-            // 1. Load claude.ai to get page context
-            // 2. JS logout to clear server session
-            // 3. Clear sessionKey cookie
-            // 4. Redirect to /login
-            // 5. THEN start URL observation
+            // Re-login: load page → JS logout → clear cookies → observe → /login
             webView.load(URLRequest(url: URL(string: "https://claude.ai")!))
-            Task { @MainActor in
+            Task { @MainActor [weak webView] in
                 try? await Task.sleep(for: .seconds(3))
+                guard let webView else { return }
 
-                // Logout via JS
                 let js = """
                     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch(e) {}
                     return 'done';
                 """
                 _ = try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
 
-                // Clear session cookies
                 let cookieStore = config.websiteDataStore.httpCookieStore
                 let cookies = await cookieStore.allCookies()
                 for cookie in cookies where cookie.name.contains("sessionKey") {
                     await cookieStore.deleteCookie(cookie)
                 }
 
-                // Now start observing and navigate to login
                 context.coordinator.startObservingURL()
                 webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
             }
@@ -89,11 +68,17 @@ struct LoginWebView: NSViewRepresentable {
             self.onLoginSuccess = onLoginSuccess
         }
 
+        deinit {
+            urlObservation?.invalidate()
+            urlObservation = nil
+        }
+
         func startObservingURL() {
+            urlObservation?.invalidate()
             urlObservation = webView?.observe(\.url, options: [.new]) { [weak self] _, change in
-                guard let self, let url = change.newValue??.absoluteString else { return }
-                Task { @MainActor in
-                    await self.handleURLChange(url)
+                guard let url = change.newValue??.absoluteString else { return }
+                Task { @MainActor [weak self] in
+                    await self?.handleURLChange(url)
                 }
             }
         }
@@ -104,22 +89,19 @@ struct LoginWebView: NSViewRepresentable {
                   !url.contains("/login"),
                   !url.contains("/api/") else { return }
 
-            print("[LoginWebView] Login success detected! URL: \(url)")
             hasCompleted = true
 
             // Retry extraction — sessionKey cookie may be set with a delay
             for attempt in 1...5 {
-                let delay = Double(attempt) * 2
+                let delay = max(1.0, Double(attempt) * 1.5)
                 try? await Task.sleep(for: .seconds(delay))
-                print("[LoginWebView] Extraction attempt \(attempt)/5...")
                 await extractCredentials()
                 if keychain.hasCredentials {
-                    print("[LoginWebView] Login complete!")
                     onLoginSuccess()
                     return
                 }
             }
-            print("[LoginWebView] Failed after 5 attempts — use Settings > Advanced for manual entry")
+            // Failed — user can use Settings > Advanced for manual entry
         }
 
         private func extractCredentials() async {
