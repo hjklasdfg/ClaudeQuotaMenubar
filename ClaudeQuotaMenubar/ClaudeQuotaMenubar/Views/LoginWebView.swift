@@ -75,15 +75,25 @@ struct LoginWebView: NSViewRepresentable {
 
         private func handleURLChange(_ url: String) async {
             guard !hasCompleted else { return }
-            // User landed on main page (not /login) = login succeeded
             guard url.contains("claude.ai"), !url.contains("/login") else { return }
 
             print("[LoginWebView] Login success detected! URL: \(url)")
             hasCompleted = true
 
-            // Wait for page to fully load
-            try? await Task.sleep(for: .seconds(3))
-            await extractCredentials()
+            // Retry extraction with increasing delays — cookie may not be set immediately
+            for attempt in 1...5 {
+                let delay = Double(attempt) * 2
+                try? await Task.sleep(for: .seconds(delay))
+                print("[LoginWebView] Extraction attempt \(attempt)/5...")
+                await extractCredentials()
+                if keychain.hasCredentials {
+                    print("[LoginWebView] Login complete!")
+                    onLoginSuccess()
+                    return
+                }
+            }
+            print("[LoginWebView] Failed to extract credentials after 5 attempts")
+            hasCompleted = false // Allow retry on next URL change
         }
 
         private func extractCredentials() async {
@@ -161,13 +171,6 @@ struct LoginWebView: NSViewRepresentable {
                     keychain.save(account: "organizationId", value: orgId)
                 }
 
-                if keychain.hasCredentials {
-                    print("[LoginWebView] Login complete!")
-                    onLoginSuccess()
-                } else {
-                    print("[LoginWebView] Could not extract all credentials")
-                    hasCompleted = false // Allow retry
-                }
             } catch {
                 print("[LoginWebView] JS error: \(error)")
                 await extractFromCookieStore()
@@ -176,9 +179,6 @@ struct LoginWebView: NSViewRepresentable {
 
         private func extractFromCookieStore() async {
             await extractSessionKeyFromCookieStore()
-            if keychain.hasCredentials {
-                onLoginSuccess()
-            }
         }
 
         private func extractSessionKeyFromCookieStore() async {
