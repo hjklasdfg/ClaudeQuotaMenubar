@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openWindow) private var openWindow
     let keychain: KeychainService
+    let isLoggedIn: Bool
     let onSave: () -> Void
     let onLogout: () -> Void
     let onRelogin: () -> Void
@@ -14,10 +15,6 @@ struct SettingsView: View {
     @State private var showingSessionKey = false
     @State private var showAdvanced = false
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-
-    private var isLoggedIn: Bool {
-        keychain.hasCredentials
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

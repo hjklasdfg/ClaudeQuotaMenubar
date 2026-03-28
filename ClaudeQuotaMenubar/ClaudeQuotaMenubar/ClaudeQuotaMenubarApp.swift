@@ -16,6 +16,7 @@ final class AppState {
     var showTrend = false
     var showLogin = false
     var loginRefreshId = UUID()
+    var isLoggedIn = false
     var consecutiveFailures = 0
     var sessionExpired = false
 
@@ -31,6 +32,7 @@ final class AppState {
         } catch {
             errorMessage = "Failed to open database: \(error.localizedDescription)"
         }
+        checkLoginState()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             self?.startPolling()
         }
@@ -63,6 +65,10 @@ final class AppState {
         return UsageColor.for(utilization: util)
     }
 
+    func checkLoginState() {
+        isLoggedIn = keychain.hasCredentials
+    }
+
     func startPolling() {
         guard keychain.hasCredentials else {
             showLogin = true
@@ -88,7 +94,7 @@ final class AppState {
 
     func refresh() async {
         guard let fetcher else {
-            showLogin = true
+            errorMessage = "Not logged in"
             return
         }
         isLoading = true
@@ -150,6 +156,7 @@ final class AppState {
         errorMessage = nil
         sessionExpired = false
         consecutiveFailures = 0
+        checkLoginState()
     }
 
     func relogin() {
@@ -160,8 +167,9 @@ final class AppState {
     func onCredentialsSaved() {
         sessionExpired = false
         consecutiveFailures = 0
+        checkLoginState()
         setupFetcher()
-        Task { await refresh() }
+        startPolling()
     }
 
     func parseResetDate(_ isoString: String?) -> Date? {
@@ -213,7 +221,7 @@ struct ClaudeQuotaMenubarApp: App {
         }
 
         Window("Claude Quota Settings", id: "settings") {
-            SettingsView(keychain: state.keychain, onSave: state.onCredentialsSaved, onLogout: state.logout, onRelogin: state.relogin)
+            SettingsView(keychain: state.keychain, isLoggedIn: state.isLoggedIn, onSave: state.onCredentialsSaved, onLogout: state.logout, onRelogin: state.relogin)
         }
         .windowResizability(.contentSize)
 
