@@ -114,6 +114,7 @@ final class AppState {
             }
 
             consecutiveFailures = 0
+            sessionExpired = false
         } catch {
             consecutiveFailures += 1
             errorMessage = error.localizedDescription
