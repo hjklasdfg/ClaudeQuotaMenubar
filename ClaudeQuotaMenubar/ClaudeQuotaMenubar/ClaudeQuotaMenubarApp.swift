@@ -16,6 +16,7 @@ final class AppState {
     var showTrend = false
     var showLogin = false
     var loginRefreshId = UUID()
+    var loginForceLogout = false
     var isLoggedIn = false
     var consecutiveFailures = 0
     var sessionExpired = false
@@ -160,6 +161,7 @@ final class AppState {
     }
 
     func relogin() {
+        loginForceLogout = true
         loginRefreshId = UUID()
         showLogin = true
     }
@@ -234,9 +236,10 @@ struct ClaudeQuotaMenubarApp: App {
             LoginWebView(keychain: state.keychain, onLoginSuccess: {
                 state.onCredentialsSaved()
                 state.showLogin = false
+                state.loginForceLogout = false
                 NSApp.windows.first { $0.title == "Login to Claude" }?.close()
                 NSApp.setActivationPolicy(.accessory)
-            })
+            }, forceLogout: state.loginForceLogout)
             .id(state.loginRefreshId) // Force new WebView on each login attempt
             .frame(minWidth: 800, minHeight: 700)
         }

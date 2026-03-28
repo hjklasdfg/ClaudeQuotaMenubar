@@ -21,6 +21,7 @@ enum LoginCredentialExtractor {
 struct LoginWebView: NSViewRepresentable {
     let keychain: KeychainService
     let onLoginSuccess: () -> Void
+    var forceLogout: Bool = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(keychain: keychain, onLoginSuccess: onLoginSuccess)
@@ -36,26 +37,27 @@ struct LoginWebView: NSViewRepresentable {
         context.coordinator.webView = webView
         context.coordinator.startObservingURL()
 
-        // Load login page, then use JS to logout first if there's an existing session
-        webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            // POST to logout API to clear server session, then reload login
-            let js = """
-                try {
-                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                } catch(e) {}
-                window.location.href = '/login';
-            """
-            try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
-
-            // Clean session cookies from store
-            let cookieStore = config.websiteDataStore.httpCookieStore
-            let cookies = await cookieStore.allCookies()
-            for cookie in cookies where cookie.name.contains("sessionKey") {
-                await cookieStore.deleteCookie(cookie)
+        if forceLogout {
+            // Re-login: logout first, then show login page
+            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                let js = """
+                    try {
+                        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                    } catch(e) {}
+                    window.location.href = '/login';
+                """
+                try? await webView.callAsyncJavaScript(js, arguments: [:], contentWorld: .page)
+                let cookieStore = config.websiteDataStore.httpCookieStore
+                let cookies = await cookieStore.allCookies()
+                for cookie in cookies where cookie.name.contains("sessionKey") {
+                    await cookieStore.deleteCookie(cookie)
+                }
             }
+        } else {
+            // First login: just load login page directly
+            webView.load(URLRequest(url: URL(string: "https://claude.ai/login")!))
         }
 
         return webView
