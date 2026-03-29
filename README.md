@@ -36,6 +36,18 @@ C 58%
 └─────────────────────────────────────────────┘
 ```
 
+## Install
+
+### Option 1: Download Pre-built App (Recommended)
+
+1. Download `ClaudeQuotaMenubar.zip` from the [latest release](https://github.com/hjklasdfg/ClaudeQuotaMenubar/releases/latest)
+2. Unzip and drag `ClaudeQuotaMenubar.app` to `/Applications`
+3. Double-click to open (or right-click → Open on first launch)
+
+### Option 2: Build from Source
+
+See [Build & Install](#build--install) below.
+
 ## Requirements
 
 - macOS 14 (Sonoma) or later

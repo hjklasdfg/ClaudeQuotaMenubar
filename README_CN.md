@@ -36,6 +36,18 @@ C 58%
 └─────────────────────────────────────────────┘
 ```
 
+## 安装
+
+### 方式一：下载预编译包（推荐）
+
+1. 从 [最新 Release](https://github.com/hjklasdfg/ClaudeQuotaMenubar/releases/latest) 下载 `ClaudeQuotaMenubar.zip`
+2. 解压后将 `ClaudeQuotaMenubar.app` 拖入 `/Applications`
+3. 双击打开（首次打开可能需要右键 → 打开）
+
+### 方式二：从源码编译
+
+参见下方[编译安装](#编译安装)。
+
 ## 系统要求
 
 - macOS 14 (Sonoma) 或更高版本
